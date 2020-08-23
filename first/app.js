@@ -11,73 +11,86 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 const jwtKey = "my_secret_key";
-const jwtExpirySeconds = 10000;
+const jwtExpirySeconds = 9000;
 
-app.get("/welcome", function (req, res) {
-    User.find({}).then(function (data) {
-        console.log('------in welcome--------')
-        console.log(data);
-        res.json(data);
-    }).catch(function (error) {
-        res.status(400).send(error);
-    })
-});
 
-app.post("/signup/users", function (req, res) {
-    console.log('------in signup--------');
-    console.log(req.body);
-    User.create(req.body).then(function (data) {
-        res.json(data);
-    }).catch(error => {
-       console.log('mobile.no already exists');
-    });
-});
-
-app.post("/login/users", function (req, res) {
-    const { mobile, pass } = req.body;
-    User.count({mobile:mobile,pass:pass}, function (err, count){ 
-        if(count==1){
-            console.log('------in login--------');
-            const token = jwt.sign({ mobile }, jwtKey, {
-                                algorithm: "HS256",
-                                expiresIn: jwtExpirySeconds,
-                            })
-            console.log('------token-----------');
-            console.log(token); 
-            return res.json({token:token});               
-        }
-        else{
-            console.log(`mobile_no and password doesn't match`);
-        }
-    })
-    
+app.get('/', function (req, res) {
+    try {
+        res.status(200).send('Welcome to FIRST NODE ATTEMPT');
+    } catch (e) {
+        res.status(500).json(e);
+    }
 })
 
-//gives userinfo with token 
-app.post("/user_info/user", function (req, res) {
-    try{
-    const {token} = req.body;
-    if (!token) {
-		return res.status(401).end()
-    }	
-    const payload = jwt.verify(token, jwtKey);
-    console.log('------------payload----------------');
-    console.log(payload);
-    res.send(`Welcome ${payload.mobile}!`);   
-    console.log("--------updating record------------");
-    console.log(payload.mobile,req.body.name,req.body.city);
-    User.findOneAndUpdate( { "mobile": payload.mobile }, { "name" : req.body.name}).then(function (data) {
-        console.log('------in welcome--------')
-        console.log(data);
-        res.json(data);
-    }).catch(function (error) {
-        res.status(400).send(error);
-    })
+app.post('/signup', function (req, res) {
+    try {
+        const { mobile, pass } = req.body;
+        User.count({ mobile: mobile, pass: pass }, function (e, result) {
+            if (e) {
+                res.status(500).send(e);
+            }
+            else {
+                if (result === 0) {
+                    User.create(req.body).then(() => {
+                        res.status(200).send('Signup Successfull');
+                    }).catch((e) => {
+                        res.status(400).send('Enter complete details');
+                    })
+                }
+                else {
+                    res.status(200).send('Mobile number already exists');
+                }
+            }
+        });
     }
-    catch(e){
-        res.json(e);
+    catch (e) {
+        res.status(500).json(e);
     }
-});
+})
+
+app.post('/login', function (req, res) {
+    try {
+        const { mobile, pass } = req.body;
+        User.count({ mobile: mobile, pass: pass }, function (e, result) {
+            if (e) {
+                res.status(500).json(e)
+            }
+            else {
+                if (result !== 1) {
+                    res.status(200).send('Either mobile number or password is missing/incorrect')
+                }
+                if (result === 1) {
+                    const token = jwt.sign({ mobile }, jwtKey, {
+                        algorithm: "HS256",
+                        expiresIn: jwtExpirySeconds,
+                    })
+                    return res.status(200).json({ token: token, msg: `Welcome ${mobile}!` });
+                }
+            }
+        })
+    } catch (e) {
+        res.status(500).json(e);
+    }
+})
+
+app.post('/user_info', function (req, res) {
+    try {
+        const token = req.body.token;
+        if (!token) {
+            res.status(400).send("no token entered");
+        }
+        else {
+            const payload = jwt.verify(token, jwtKey);
+            User.findOneAndUpdate({ "mobile": payload.mobile },
+                { "name": req.body.name, "city": req.body.city, "age": req.body.age }).then(
+                    res.status(200).send(`Welcome ${req.body.name}`)
+                ).catch((e) => res.status(500).send(e))
+        }
+    }
+    catch (e) {
+        res.status(500).json(e);
+    }
+})
 
 var server = app.listen(4000, function () {
     console.log("app running on port.", server.address().port);
